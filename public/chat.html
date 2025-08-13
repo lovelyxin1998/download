@@ -1,0 +1,871 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>全局加密通信 - 文件下载服务</title>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <script src="/socket.io/socket.io.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.1.1/crypto-js.min.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            color: #333;
+        }
+
+        /* 导航栏样式 */
+        .navbar {
+            background: rgba(255, 255, 255, 0.95);
+            backdrop-filter: blur(10px);
+            border-bottom: 1px solid rgba(0, 0, 0, 0.1);
+            position: sticky;
+            top: 0;
+            z-index: 1000;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+        }
+
+        .nav-container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 0 20px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            height: 60px;
+        }
+
+        .nav-brand {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            font-size: 1.2rem;
+            font-weight: 700;
+            color: #4a5568;
+        }
+
+        .nav-brand i {
+            color: #667eea;
+            font-size: 1.4rem;
+        }
+
+        .nav-menu {
+            display: flex;
+            gap: 20px;
+        }
+
+        .nav-link {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 10px 16px;
+            border-radius: 10px;
+            text-decoration: none;
+            color: #4a5568;
+            font-weight: 500;
+            transition: all 0.3s ease;
+        }
+
+        .nav-link:hover {
+            background: rgba(102, 126, 234, 0.1);
+            color: #667eea;
+        }
+
+        .nav-link.active {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+        }
+
+        .nav-link i {
+            font-size: 1rem;
+        }
+
+        /* 主容器 */
+        .main-container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+
+        /* 登录界面 */
+        .login-screen {
+            background: rgba(255, 255, 255, 0.95);
+            backdrop-filter: blur(10px);
+            border-radius: 20px;
+            padding: 40px;
+            text-align: center;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
+            margin-bottom: 20px;
+        }
+
+        .login-header {
+            margin-bottom: 30px;
+        }
+
+        .login-header h1 {
+            color: #4a5568;
+            font-size: 2.5rem;
+            margin-bottom: 10px;
+            font-weight: 700;
+        }
+
+        .login-header h1 i {
+            color: #667eea;
+            margin-right: 15px;
+        }
+
+        .login-header p {
+            color: #718096;
+            font-size: 1.1rem;
+        }
+
+        .login-form {
+            max-width: 400px;
+            margin: 0 auto;
+        }
+
+        .input-group {
+            margin-bottom: 20px;
+            text-align: left;
+        }
+
+        .input-group label {
+            display: block;
+            margin-bottom: 8px;
+            color: #4a5568;
+            font-weight: 600;
+        }
+
+        .input-group input {
+            width: 100%;
+            padding: 15px 20px;
+            border: 2px solid #e2e8f0;
+            border-radius: 12px;
+            font-size: 1rem;
+            transition: all 0.3s ease;
+            background: white;
+        }
+
+        .input-group input:focus {
+            outline: none;
+            border-color: #667eea;
+            box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+        }
+
+        .btn {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            padding: 15px 30px;
+            border-radius: 12px;
+            cursor: pointer;
+            font-size: 1rem;
+            font-weight: 600;
+            transition: all 0.3s ease;
+            display: inline-flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 25px rgba(102, 126, 234, 0.3);
+        }
+
+        .btn:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        /* 聊天界面 */
+        .chat-screen {
+            display: none;
+            background: rgba(255, 255, 255, 0.95);
+            backdrop-filter: blur(10px);
+            border-radius: 20px;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
+            overflow: hidden;
+        }
+
+        .chat-header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 20px 30px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .chat-header h2 {
+            font-size: 1.5rem;
+            font-weight: 600;
+        }
+
+        .chat-header-controls {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+        }
+
+        .chat-status {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            font-size: 0.9rem;
+        }
+
+        .status-indicator {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: #48bb78;
+            animation: pulse 2s infinite;
+        }
+
+        .change-key-btn {
+            background: rgba(255, 255, 255, 0.2);
+            color: white;
+            border: 1px solid rgba(255, 255, 255, 0.3);
+            padding: 8px 16px;
+            border-radius: 20px;
+            cursor: pointer;
+            font-size: 0.9rem;
+            transition: all 0.3s ease;
+        }
+
+        .change-key-btn:hover {
+            background: rgba(255, 255, 255, 0.3);
+            border-color: rgba(255, 255, 255, 0.5);
+        }
+
+        .logout-btn {
+            background: rgba(255, 255, 255, 0.2);
+            color: white;
+            border: 1px solid rgba(255, 255, 255, 0.3);
+            padding: 8px 16px;
+            border-radius: 20px;
+            cursor: pointer;
+            font-size: 0.9rem;
+            transition: all 0.3s ease;
+        }
+
+        .logout-btn:hover {
+            background: rgba(255, 255, 255, 0.3);
+            border-color: rgba(255, 255, 255, 0.5);
+        }
+
+        @keyframes pulse {
+            0% { opacity: 1; }
+            50% { opacity: 0.5; }
+            100% { opacity: 1; }
+        }
+
+        .chat-content {
+            height: 600px;
+        }
+
+        .chat-main {
+            display: flex;
+            flex-direction: column;
+            height: 100%;
+        }
+
+        .messages-container {
+            flex: 1;
+            padding: 20px;
+            overflow-y: auto;
+            background: white;
+        }
+
+        .message {
+            margin-bottom: 15px;
+            padding: 12px 16px;
+            border-radius: 15px;
+            max-width: 70%;
+            word-wrap: break-word;
+            position: relative;
+        }
+
+        .message.sent {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            margin-left: auto;
+            border-bottom-right-radius: 5px;
+        }
+
+        .message.received {
+            background: #f1f5f9;
+            color: #333;
+            border-bottom-left-radius: 5px;
+        }
+
+        .message-header {
+            font-size: 0.8rem;
+            margin-bottom: 5px;
+            opacity: 0.8;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .message-actions {
+            display: flex;
+            gap: 5px;
+        }
+
+        .copy-btn {
+            background: rgba(255, 255, 255, 0.2);
+            color: inherit;
+            border: none;
+            padding: 2px 6px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 0.7rem;
+            transition: all 0.2s ease;
+            opacity: 0.7;
+        }
+
+        .copy-btn:hover {
+            opacity: 1;
+            background: rgba(255, 255, 255, 0.3);
+        }
+
+        .message.received .copy-btn {
+            background: rgba(0, 0, 0, 0.1);
+            color: #333;
+        }
+
+        .message.received .copy-btn:hover {
+            background: rgba(0, 0, 0, 0.2);
+        }
+
+        .message-time {
+            font-size: 0.7rem;
+            opacity: 0.7;
+            margin-top: 5px;
+        }
+
+        .message-input-container {
+            padding: 20px;
+            background: #f8fafc;
+            border-top: 1px solid #e2e8f0;
+            display: flex;
+            gap: 15px;
+            align-items: center;
+        }
+
+        .message-input {
+            flex: 1;
+            padding: 15px 20px;
+            border: 2px solid #e2e8f0;
+            border-radius: 25px;
+            font-size: 1rem;
+            transition: all 0.3s ease;
+            background: white;
+        }
+
+        .message-input:focus {
+            outline: none;
+            border-color: #667eea;
+            box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+        }
+
+        .send-btn {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            padding: 15px 25px;
+            border-radius: 25px;
+            cursor: pointer;
+            font-size: 1rem;
+            font-weight: 600;
+            transition: all 0.3s ease;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .send-btn:hover:not(:disabled) {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 15px rgba(102, 126, 234, 0.3);
+        }
+
+        .send-btn:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+        }
+
+        /* 通知样式 */
+        .notification {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            background: #48bb78;
+            color: white;
+            padding: 15px 25px;
+            border-radius: 10px;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.15);
+            z-index: 1000;
+            transform: translateX(100%);
+            transition: transform 0.3s ease;
+            max-width: 300px;
+        }
+
+        .notification.show {
+            transform: translateX(0);
+        }
+
+        .notification.error {
+            background: #f56565;
+        }
+
+        .notification.info {
+            background: #4299e1;
+        }
+
+        /* 响应式设计 */
+        @media (max-width: 768px) {
+            .nav-container {
+                padding: 0 15px;
+            }
+            
+            .nav-menu {
+                gap: 10px;
+            }
+            
+            .nav-link {
+                padding: 8px 12px;
+                font-size: 0.9rem;
+            }
+            
+            .main-container {
+                padding: 10px;
+            }
+            
+            .login-screen {
+                padding: 30px 20px;
+            }
+            
+            .login-header h1 {
+                font-size: 2rem;
+            }
+            
+            .chat-content {
+                height: 500px;
+            }
+            
+            .message {
+                max-width: 85%;
+            }
+        }
+
+        /* 滚动条样式 */
+        .messages-container::-webkit-scrollbar {
+            width: 6px;
+        }
+
+        .messages-container::-webkit-scrollbar-track {
+            background: #f1f1f1;
+            border-radius: 3px;
+        }
+
+        .messages-container::-webkit-scrollbar-thumb {
+            background: #c1c1c1;
+            border-radius: 3px;
+        }
+
+        .messages-container::-webkit-scrollbar-thumb:hover {
+            background: #a8a8a8;
+        }
+    </style>
+</head>
+<body>
+    <!-- 导航栏 -->
+    <nav class="navbar">
+        <div class="nav-container">
+            <div class="nav-brand">
+                <i class="fas fa-server"></i>
+                <span>文件服务</span>
+            </div>
+            <div class="nav-menu">
+                <a href="/" class="nav-link">
+                    <i class="fas fa-download"></i>
+                    文件下载
+                </a>
+                <a href="/chat.html" class="nav-link active">
+                    <i class="fas fa-shield-alt"></i>
+                    加密聊天
+                </a>
+            </div>
+        </div>
+    </nav>
+
+    <div class="main-container">
+        <!-- 登录界面 -->
+        <div id="loginScreen" class="login-screen">
+            <div class="login-header">
+                <h1><i class="fas fa-shield-alt"></i> 全局加密通信</h1>
+                <p>输入相同的密钥即可解密消息</p>
+            </div>
+            <div class="login-form">
+                <div class="input-group">
+                    <label for="cryptoKey">加密密钥</label>
+                    <input type="password" id="cryptoKey" placeholder="请输入加密密钥" maxlength="50">
+                </div>
+                <button id="joinBtn" class="btn">
+                    <i class="fas fa-sign-in-alt"></i>
+                    加入聊天
+                </button>
+            </div>
+        </div>
+
+        <!-- 聊天界面 -->
+        <div id="chatScreen" class="chat-screen">
+            <div class="chat-header">
+                <h2><i class="fas fa-comments"></i> 加密聊天室</h2>
+                <div class="chat-header-controls">
+                    <div class="chat-status">
+                        <div class="status-indicator"></div>
+                        <span id="statusText">已连接</span>
+                    </div>
+                    <button id="changeKeyBtn" class="change-key-btn">
+                        <i class="fas fa-key"></i> 切换密钥
+                    </button>
+                    <button id="logoutBtn" class="logout-btn">
+                        <i class="fas fa-sign-out-alt"></i> 退出聊天
+                    </button>
+                </div>
+            </div>
+            
+            <div class="chat-content">
+                <div class="chat-main">
+                    <div class="messages-container" id="messagesContainer"></div>
+                    <div class="message-input-container">
+                        <input type="text" id="messageInput" class="message-input" placeholder="输入消息..." disabled>
+                        <button id="sendBtn" class="send-btn" disabled>
+                            <i class="fas fa-paper-plane"></i>
+                            发送
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div id="notification" class="notification"></div>
+
+    <script>
+        // 全局变量
+        let socket;
+        let currentUser = null;
+        let cryptoKey = null;
+
+        // DOM 元素
+        const loginScreen = document.getElementById('loginScreen');
+        const chatScreen = document.getElementById('chatScreen');
+        const cryptoKeyInput = document.getElementById('cryptoKey');
+        const joinBtn = document.getElementById('joinBtn');
+        const statusText = document.getElementById('statusText');
+        const messagesContainer = document.getElementById('messagesContainer');
+        const messageInput = document.getElementById('messageInput');
+        const sendBtn = document.getElementById('sendBtn');
+        const changeKeyBtn = document.getElementById('changeKeyBtn');
+        const logoutBtn = document.getElementById('logoutBtn');
+
+        // 初始化
+        document.addEventListener('DOMContentLoaded', () => {
+            setupEventListeners();
+        });
+
+        function setupEventListeners() {
+            joinBtn.addEventListener('click', joinChat);
+            sendBtn.addEventListener('click', sendMessage);
+            
+            messageInput.addEventListener('keypress', (e) => {
+                if (e.key === 'Enter') {
+                    sendMessage();
+                }
+            });
+
+            changeKeyBtn.addEventListener('click', () => {
+                const newKey = prompt('请输入新的加密密钥 (当前密钥将失效)');
+                if (newKey && newKey.trim().length > 0) {
+                    const oldKey = cryptoKey;
+                    cryptoKey = newKey.trim();
+                    
+                    // 清空消息历史
+                    messagesContainer.innerHTML = '';
+                    
+                    showNotification('密钥已更新，消息历史已清空', 'info');
+                    
+                    // 如果当前在聊天界面，需要重新连接
+                    if (chatScreen.style.display === 'block') {
+                        // 断开当前连接
+                        if (socket) {
+                            socket.disconnect();
+                        }
+                        
+                        // 重新连接，使用新的密钥
+                        socket = io();
+                        socket.on('connect', () => {
+                            statusText.textContent = '已连接';
+                            showNotification('成功加入聊天室 (使用新密钥)');
+                            // 启用消息输入
+                            messageInput.disabled = false;
+                            sendBtn.disabled = false;
+                            messageInput.focus();
+                        });
+                        socket.on('receive-encrypted-message', (encryptedMessage) => {
+                            handleReceivedMessage(encryptedMessage);
+                        });
+                        socket.on('disconnect', () => {
+                            statusText.textContent = '连接断开';
+                            showNotification('连接已断开', 'error');
+                        });
+                    }
+                } else if (newKey !== null) { // 用户点击了取消按钮
+                    showNotification('请输入有效的密钥', 'error');
+                }
+            });
+
+            logoutBtn.addEventListener('click', () => {
+                if (confirm('确定要退出聊天吗？')) {
+                    if (socket) {
+                        socket.disconnect();
+                    }
+                    loginScreen.style.display = 'block';
+                    chatScreen.style.display = 'none';
+                    statusText.textContent = '未连接';
+                    cryptoKeyInput.value = ''; // 清空密钥输入框
+                    messageInput.disabled = true;
+                    sendBtn.disabled = true;
+                    showNotification('已退出聊天', 'info');
+                }
+            });
+        }
+
+        function joinChat() {
+            const key = cryptoKeyInput.value.trim();
+            
+            if (!key) {
+                showNotification('请输入加密密钥', 'error');
+                return;
+            }
+
+            // 连接Socket.IO
+            socket = io();
+            
+            socket.on('connect', () => {
+                console.log('Socket.IO已连接');
+                // 直接切换到聊天界面，不需要发送用户加入事件
+                currentUser = { id: 'anonymous', name: '我' };
+                cryptoKey = key;
+                
+                // 切换到聊天界面
+                loginScreen.style.display = 'none';
+                chatScreen.style.display = 'block';
+                
+                showNotification('成功加入聊天室');
+                
+                // 启用消息输入
+                messageInput.disabled = false;
+                sendBtn.disabled = false;
+                messageInput.focus();
+            });
+
+            socket.on('receive-encrypted-message', (data) => {
+                console.log(data);
+                const {encryptedMessage} = data;
+                handleReceivedMessage(encryptedMessage);
+            });
+
+            socket.on('disconnect', () => {
+                statusText.textContent = '连接断开';
+                showNotification('连接已断开', 'error');
+            });
+
+            socket.on('connect', () => {
+                statusText.textContent = '已连接';
+            });
+        }
+
+        function sendMessage() {
+            const message = messageInput.value.trim();
+            if (!message || !cryptoKey) return;
+
+            try {
+                // 使用简单的加密（这里使用Base64编码作为示例）
+                const encrypted = encryptMessage(message, cryptoKey);
+                
+                // 发送加密消息（直接发送字符串，与服务器端匹配）
+                socket.emit('send-encrypted-message', encrypted);
+                
+                // 在本地显示已发送的消息
+                displayMessage({
+                    id: Date.now().toString(),
+                    encryptedText: encrypted,
+                    sender: {
+                        id: 'anonymous',
+                        name: '我'
+                    },
+                    timestamp: new Date().toISOString(),
+                    isLocal: true,
+                    decryptedText: message
+                });
+                
+                // 清空输入框
+                messageInput.value = '';
+                
+            } catch (error) {
+                console.error('加密失败:', error);
+                showNotification('消息加密失败', 'error');
+            }
+        }
+
+        function handleReceivedMessage(encryptedMessage) {
+            try {
+                // 尝试解密消息
+                const decrypted = decryptMessage(encryptedMessage, cryptoKey);
+                
+                // 只有解密成功才显示消息
+                if (decrypted) {
+                    displayMessage({
+                        id: Date.now().toString(),
+                        encryptedText: encryptedMessage,
+                        sender: {
+                            id: 'anonymous',
+                            name: '其他用户'
+                        },
+                        timestamp: new Date().toISOString(),
+                        isLocal: false,
+                        decryptedText: decrypted
+                    });
+                }
+                // 如果解密失败，不显示任何消息
+                
+            } catch (error) {
+                console.error('解密失败:', error);
+                // 解密异常时不显示消息
+            }
+        }
+
+        function displayMessage(message) {
+            const messageElement = document.createElement('div');
+            messageElement.className = `message ${message.isLocal ? 'sent' : 'received'}`;
+            
+            const time = new Date(message.timestamp).toLocaleTimeString('zh-CN', {
+                hour: '2-digit',
+                minute: '2-digit'
+            });
+            
+            // 统一的消息显示格式，不区分发送者
+            messageElement.innerHTML = `
+                <div class="message-header">
+                    <span>${message.isLocal ? '我' : '其他用户'}</span>
+                    <div class="message-actions">
+                        <button class="copy-btn" onclick="copyToClipboard('${message.decryptedText || message.encryptedText}')" title="复制消息内容">
+                            <i class="fas fa-copy"></i>
+                        </button>
+                    </div>
+                </div>
+                <div>${message.decryptedText || message.encryptedText}</div>
+                <div class="message-time">${time}</div>
+            `;
+            
+            messagesContainer.appendChild(messageElement);
+            messagesContainer.scrollTop = messagesContainer.scrollHeight;
+        }
+
+        // 使用CryptoJS的AES加密/解密函数
+        function encryptMessage(message, key) {
+            try {
+                // 使用CryptoJS.AES.encrypt进行加密
+                const encrypted = CryptoJS.AES.encrypt(message, key).toString();
+                return encrypted;
+            } catch (error) {
+                console.error('加密失败:', error);
+                throw error;
+            }
+        }
+
+        function decryptMessage(encryptedMessage, key) {
+            try {
+                // 使用CryptoJS.AES.decrypt进行解密
+                const decrypted = CryptoJS.AES.decrypt(encryptedMessage, key);
+                const decryptedText = decrypted.toString(CryptoJS.enc.Utf8);
+                
+                // 如果解密后的文本为空，说明密钥错误
+                if (decryptedText === '') {
+                    return null;
+                }
+                
+                return decryptedText;
+            } catch (error) {
+                console.error('解密失败:', error);
+                return null;
+            }
+        }
+
+        function showNotification(message, type = 'success') {
+            const notification = document.getElementById('notification');
+            notification.textContent = message;
+            notification.className = `notification ${type}`;
+            notification.classList.add('show');
+            
+            setTimeout(() => {
+                notification.classList.remove('show');
+            }, 3000);
+        }
+
+        // 复制消息到剪贴板
+        function copyToClipboard(text) {
+            // 使用现代的Clipboard API
+            if (navigator.clipboard && window.isSecureContext) {
+                navigator.clipboard.writeText(text).then(() => {
+                    showNotification('消息已复制到剪贴板', 'success');
+                }).catch(err => {
+                    console.error('复制失败:', err);
+                    // 降级到传统方法
+                    fallbackCopyToClipboard(text);
+                });
+            } else {
+                // 降级到传统方法
+                fallbackCopyToClipboard(text);
+            }
+        }
+
+        // 传统的复制方法（降级方案）
+        function fallbackCopyToClipboard(text) {
+            try {
+                const textarea = document.createElement('textarea');
+                textarea.value = text;
+                textarea.style.position = 'fixed';
+                textarea.style.left = '-999999px';
+                textarea.style.top = '-999999px';
+                document.body.appendChild(textarea);
+                textarea.focus();
+                textarea.select();
+                const successful = document.execCommand('copy');
+                document.body.removeChild(textarea);
+                
+                if (successful) {
+                    showNotification('消息已复制到剪贴板', 'success');
+                } else {
+                    showNotification('复制失败，请手动选择复制', 'error');
+                }
+            } catch (err) {
+                console.error('复制失败:', err);
+                showNotification('复制失败，请手动选择复制', 'error');
+            }
+        }
+    </script>
+</body>
+</html>

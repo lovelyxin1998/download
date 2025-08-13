@@ -3,8 +3,14 @@ const cors = require('cors');
 const path = require('path');
 const fs = require('fs');
 const mime = require('mime-types');
+const { createServer } = require('http');
+const socketIo = require('socket.io');
+const crypto = require('crypto');
 
 const app = express();
+const server = createServer(app);
+const io = socketIo(server);
+
 const PORT = process.env.PORT || 3000;
 
 // 中间件
@@ -12,7 +18,7 @@ app.use(cors());
 app.use(express.json());
 app.use(express.static('public'));
 
-// 配置文件目录路径（可以根据需要修改）
+// 配置文件目录路径
 const FILES_DIRECTORY = path.join(__dirname, 'files');
 
 // 确保文件目录存在
@@ -20,7 +26,7 @@ if (!fs.existsSync(FILES_DIRECTORY)) {
     fs.mkdirSync(FILES_DIRECTORY, { recursive: true });
 }
 
-// 获取文件列表的API
+// 文件相关API
 app.get('/api/files', (req, res) => {
     try {
         const files = [];
@@ -47,7 +53,6 @@ app.get('/api/files', (req, res) => {
             }
         });
         
-        // 按文件名排序
         files.sort((a, b) => a.name.localeCompare(b.name));
         
         res.json({
@@ -64,13 +69,11 @@ app.get('/api/files', (req, res) => {
     }
 });
 
-// 文件下载API
 app.get('/api/download/:filename', (req, res) => {
     try {
         const filename = decodeURIComponent(req.params.filename);
         const filePath = path.join(FILES_DIRECTORY, filename);
         
-        // 安全检查：确保文件路径在允许的目录内
         const resolvedPath = path.resolve(filePath);
         if (!resolvedPath.startsWith(path.resolve(FILES_DIRECTORY))) {
             return res.status(403).json({
@@ -94,13 +97,11 @@ app.get('/api/download/:filename', (req, res) => {
             });
         }
         
-        // 设置响应头
         const mimeType = mime.lookup(filename) || 'application/octet-stream';
         res.setHeader('Content-Type', mimeType);
         res.setHeader('Content-Disposition', `attachment; filename="${encodeURIComponent(filename)}"`);
         res.setHeader('Content-Length', stats.size);
         
-        // 创建文件流并发送
         const fileStream = fs.createReadStream(filePath);
         fileStream.pipe(res);
         
@@ -161,10 +162,38 @@ function formatFileSize(bytes) {
     return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
 }
 
+const clients = new Set();
+
+io.on('connection', (socket) => {
+    console.log('New user connected:', socket.id);
+    clients.add(socket.id);
+
+    // 广播加密消息给所有用户
+    socket.on('send-encrypted-message', (encryptedMessage) => {
+        clients.forEach(clientId => {
+
+            if(clientId !== socket.id){
+                io.to(clientId).emit('receive-encrypted-message', {
+                    senderId: socket.id,
+                    encryptedMessage
+                });
+            }
+            
+        });
+    });
+
+    socket.on('disconnect', () => {
+        console.log('User disconnected:', socket.id);
+        clients.delete(socket.id);
+    });
+});
+
 // 启动服务器
-app.listen(PORT, () => {
+server.listen(PORT, '0.0.0.0', () => {
     console.log(`🚀 文件下载服务已启动`);
     console.log(`📁 文件目录: ${FILES_DIRECTORY}`);
-    console.log(`🌐 访问地址: http://localhost:${PORT}`);
+    console.log(`🌐 本地访问: http://localhost:${PORT}`);
+    console.log(`🌐 外部访问: http://0.0.0.0:${PORT}`);
     console.log(`📋 API文档: http://localhost:${PORT}/api/files`);
+    console.log(`�� 加密聊天功能已启用`);
 }); 
