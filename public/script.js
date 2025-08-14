@@ -3,6 +3,9 @@ let allFiles = [];
 let filteredFiles = [];
 let currentFilter = 'all';
 
+// 获取当前域名，确保API调用正确
+const currentOrigin = window.location.origin;
+
 // DOM 元素
 const filesList = document.getElementById('filesList');
 const loadingSpinner = document.getElementById('loadingSpinner');
@@ -46,7 +49,7 @@ async function loadFiles() {
     try {
         showLoading(true);
         
-        const response = await fetch('/api/files');
+        const response = await fetch(`${currentOrigin}/api/files`);
         const data = await response.json();
         
         if (data.success) {
@@ -236,7 +239,7 @@ function filterFiles(searchTerm = '') {
 // 显示文件详情
 async function showFileDetails(file) {
     try {
-        const response = await fetch(`/api/file-info/${encodeURIComponent(file.name)}`);
+        const response = await fetch(`${currentOrigin}/api/file-info/${encodeURIComponent(file.name)}`);
         const data = await response.json();
         
         if (data.success) {
@@ -250,7 +253,9 @@ async function showFileDetails(file) {
             document.getElementById('modalSize').textContent = fileInfo.sizeFormatted;
             document.getElementById('modalType').textContent = fileInfo.mimeType;
             document.getElementById('modalModified').textContent = modifiedDate;
-            document.getElementById('modalDownloadUrl').value = `${baseUrl}${fileInfo.downloadUrl}`;
+            // 确保下载链接使用完整URL
+            const fullDownloadUrl = fileInfo.downloadUrl.startsWith('http') ? fileInfo.downloadUrl : `${currentOrigin}${fileInfo.downloadUrl}`;
+            document.getElementById('modalDownloadUrl').value = fullDownloadUrl;
             
             // 设置下载按钮事件
             const modalDownloadBtn = document.getElementById('modalDownloadBtn');
@@ -294,7 +299,9 @@ function copyDownloadUrl() {
 // 下载文件
 function downloadFile(file) {
     const link = document.createElement('a');
-    link.href = file.downloadUrl;
+    // 确保下载链接使用完整URL
+    const fullDownloadUrl = file.downloadUrl.startsWith('http') ? file.downloadUrl : `${currentOrigin}${file.downloadUrl}`;
+    link.href = fullDownloadUrl;
     link.download = file.name;
     link.style.display = 'none';
     
