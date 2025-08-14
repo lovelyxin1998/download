@@ -6,7 +6,6 @@
     <title>全局加密通信 - 文件下载服务</title>
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.1.1/crypto-js.min.js"></script>
-    <base href="/">
     <style>
         * {
             margin: 0;
@@ -579,11 +578,11 @@
                 
                 // 根据当前协议选择Socket.IO加载方式
                 const script = document.createElement('script');
-                if (currentProtocol === 'https:') {
-                    // HTTPS环境，使用CDN
+                if (currentProtocol === 'https:' && currentHost !== 'localhost:3000') {
+                    // HTTPS域名环境，使用CDN
                     script.src = 'https://cdn.socket.io/4.7.2/socket.io.min.js';
                 } else {
-                    // HTTP环境，使用本地
+                    // HTTP环境或本地访问，使用相对路径
                     script.src = '/socket.io/socket.io.js';
                 }
                 
@@ -652,7 +651,9 @@
                                 transports: ['websocket', 'polling'],
                                 upgrade: true,
                                 rememberUpgrade: true,
-                                secure: currentProtocol === 'https:'
+                                secure: currentProtocol === 'https:',
+                                // 如果是本地访问，使用默认配置
+                                ...(currentHost === 'localhost:3000' && {})
                             });
                             socket.on('connect', () => {
                                 statusText.textContent = '已连接';
@@ -713,7 +714,9 @@
                     transports: ['websocket', 'polling'],
                     upgrade: true,
                     rememberUpgrade: true,
-                    secure: currentProtocol === 'https:'
+                    secure: currentProtocol === 'https:',
+                    // 如果是本地访问，使用默认配置
+                    ...(currentHost === 'localhost:3000' && {})
                 });
                 
                 socket.on('connect', () => {
