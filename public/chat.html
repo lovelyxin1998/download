@@ -5,7 +5,6 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>全局加密通信 - 文件下载服务</title>
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
-    <script src="/socket.io/socket.io.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.1.1/crypto-js.min.js"></script>
     <base href="/">
     <style>
@@ -567,6 +566,32 @@
         // 获取当前域名和端口，确保Socket.IO连接正确
         const currentOrigin = window.location.origin;
         const currentHost = window.location.host;
+        const currentProtocol = window.location.protocol;
+        
+        // 动态加载Socket.IO
+        function loadSocketIO() {
+            return new Promise((resolve, reject) => {
+                // 如果已经加载过，直接返回
+                if (window.io) {
+                    resolve();
+                    return;
+                }
+                
+                // 根据当前协议选择Socket.IO加载方式
+                const script = document.createElement('script');
+                if (currentProtocol === 'https:') {
+                    // HTTPS环境，使用CDN
+                    script.src = 'https://cdn.socket.io/4.7.2/socket.io.min.js';
+                } else {
+                    // HTTP环境，使用本地
+                    script.src = '/socket.io/socket.io.js';
+                }
+                
+                script.onload = () => resolve();
+                script.onerror = () => reject(new Error('Socket.IO加载失败'));
+                document.head.appendChild(script);
+            });
+        }
         
         // 动态设置Socket.IO连接
         let socket;
@@ -600,7 +625,7 @@
                 }
             });
 
-            changeKeyBtn.addEventListener('click', () => {
+            changeKeyBtn.addEventListener('click', async () => {
                 const newKey = prompt('请输入新的加密密钥 (当前密钥将失效)');
                 if (newKey && newKey.trim().length > 0) {
                     const oldKey = cryptoKey;
@@ -613,33 +638,42 @@
                     
                     // 如果当前在聊天界面，需要重新连接
                     if (chatScreen.style.display === 'block') {
-                        // 断开当前连接
-                        if (socket) {
-                            socket.disconnect();
+                        try {
+                            // 断开当前连接
+                            if (socket) {
+                                socket.disconnect();
+                            }
+                            
+                            // 重新加载Socket.IO并连接
+                            await loadSocketIO();
+                            
+                            // 重新连接，使用新的密钥和正确的域名
+                            socket = io(currentOrigin, {
+                                transports: ['websocket', 'polling'],
+                                upgrade: true,
+                                rememberUpgrade: true,
+                                secure: currentProtocol === 'https:'
+                            });
+                            socket.on('connect', () => {
+                                statusText.textContent = '已连接';
+                                showNotification('成功加入聊天室 (使用新密钥)');
+                                // 启用消息输入
+                                messageInput.disabled = false;
+                                sendBtn.disabled = false;
+                                messageInput.focus();
+                            });
+                            socket.on('receive-encrypted-message', (data) => {
+                                const {encryptedMessage} = data;
+                                handleReceivedMessage(encryptedMessage);
+                            });
+                            socket.on('disconnect', () => {
+                                statusText.textContent = '连接断开';
+                                showNotification('连接已断开', 'error');
+                            });
+                        } catch (error) {
+                            console.error('重连失败:', error);
+                            showNotification('重连失败: ' + error.message, 'error');
                         }
-                        
-                        // 重新连接，使用新的密钥和正确的域名
-                        socket = io(currentOrigin, {
-                            transports: ['websocket', 'polling'],
-                            upgrade: true,
-                            rememberUpgrade: true
-                        });
-                        socket.on('connect', () => {
-                            statusText.textContent = '已连接';
-                            showNotification('成功加入聊天室 (使用新密钥)');
-                            // 启用消息输入
-                            messageInput.disabled = false;
-                            sendBtn.disabled = false;
-                            messageInput.focus();
-                        });
-                        socket.on('receive-encrypted-message', (data) => {
-                            const {encryptedMessage} = data;
-                            handleReceivedMessage(encryptedMessage);
-                        });
-                        socket.on('disconnect', () => {
-                            statusText.textContent = '连接断开';
-                            showNotification('连接已断开', 'error');
-                        });
                     }
                 } else if (newKey !== null) { // 用户点击了取消按钮
                     showNotification('请输入有效的密钥', 'error');
@@ -662,7 +696,7 @@
             });
         }
 
-        function joinChat() {
+        async function joinChat() {
             const key = cryptoKeyInput.value.trim();
             
             if (!key) {
@@ -670,44 +704,54 @@
                 return;
             }
 
-            // 连接Socket.IO，使用当前域名
-            socket = io(currentOrigin, {
-                transports: ['websocket', 'polling'],
-                upgrade: true,
-                rememberUpgrade: true
-            });
-            
-            socket.on('connect', () => {
-                console.log('Socket.IO已连接，服务器地址:', currentOrigin);
-                // 直接切换到聊天界面，不需要发送用户加入事件
-                currentUser = { id: 'anonymous', name: '我' };
-                cryptoKey = key;
+            try {
+                // 先加载Socket.IO
+                await loadSocketIO();
                 
-                // 切换到聊天界面
-                loginScreen.style.display = 'none';
-                chatScreen.style.display = 'block';
+                // 连接Socket.IO，使用当前域名
+                socket = io(currentOrigin, {
+                    transports: ['websocket', 'polling'],
+                    upgrade: true,
+                    rememberUpgrade: true,
+                    secure: currentProtocol === 'https:'
+                });
                 
-                showNotification('成功加入聊天室');
+                socket.on('connect', () => {
+                    console.log('Socket.IO已连接，服务器地址:', currentOrigin);
+                    // 直接切换到聊天界面，不需要发送用户加入事件
+                    currentUser = { id: 'anonymous', name: '我' };
+                    cryptoKey = key;
+                    
+                    // 切换到聊天界面
+                    loginScreen.style.display = 'none';
+                    chatScreen.style.display = 'block';
+                    
+                    showNotification('成功加入聊天室');
+                    
+                    // 启用消息输入
+                    messageInput.disabled = false;
+                    sendBtn.disabled = false;
+                    messageInput.focus();
+                });
+
+                socket.on('receive-encrypted-message', (data) => {
+                    const {encryptedMessage} = data;
+                    handleReceivedMessage(encryptedMessage);
+                });
+
+                socket.on('disconnect', () => {
+                    statusText.textContent = '连接断开';
+                    showNotification('连接已断开', 'error');
+                });
+
+                socket.on('connect', () => {
+                    statusText.textContent = '已连接';
+                });
                 
-                // 启用消息输入
-                messageInput.disabled = false;
-                sendBtn.disabled = false;
-                messageInput.focus();
-            });
-
-            socket.on('receive-encrypted-message', (data) => {
-                const {encryptedMessage} = data;
-                handleReceivedMessage(encryptedMessage);
-            });
-
-            socket.on('disconnect', () => {
-                statusText.textContent = '连接断开';
-                showNotification('连接已断开', 'error');
-            });
-
-            socket.on('connect', () => {
-                statusText.textContent = '已连接';
-            });
+            } catch (error) {
+                console.error('连接失败:', error);
+                showNotification('连接失败: ' + error.message, 'error');
+            }
         }
 
         function sendMessage() {
