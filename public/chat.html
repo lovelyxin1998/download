@@ -563,12 +563,16 @@
     <div id="notification" class="notification"></div>
 
     <script>
-        // 全局变量
+        // 获取当前域名和端口，确保Socket.IO连接正确
+        const currentOrigin = window.location.origin;
+        const currentHost = window.location.host;
+        
+        // 动态设置Socket.IO连接
         let socket;
         let currentUser = null;
-        let cryptoKey = null;
-
-        // DOM 元素
+        let cryptoKey = '';
+        
+        // DOM元素
         const loginScreen = document.getElementById('loginScreen');
         const chatScreen = document.getElementById('chatScreen');
         const cryptoKeyInput = document.getElementById('cryptoKey');
@@ -613,8 +617,12 @@
                             socket.disconnect();
                         }
                         
-                        // 重新连接，使用新的密钥
-                        socket = io();
+                        // 重新连接，使用新的密钥和正确的域名
+                        socket = io(currentOrigin, {
+                            transports: ['websocket', 'polling'],
+                            upgrade: true,
+                            rememberUpgrade: true
+                        });
                         socket.on('connect', () => {
                             statusText.textContent = '已连接';
                             showNotification('成功加入聊天室 (使用新密钥)');
@@ -623,7 +631,8 @@
                             sendBtn.disabled = false;
                             messageInput.focus();
                         });
-                        socket.on('receive-encrypted-message', (encryptedMessage) => {
+                        socket.on('receive-encrypted-message', (data) => {
+                            const {encryptedMessage} = data;
                             handleReceivedMessage(encryptedMessage);
                         });
                         socket.on('disconnect', () => {
@@ -660,11 +669,15 @@
                 return;
             }
 
-            // 连接Socket.IO
-            socket = io();
+            // 连接Socket.IO，使用当前域名
+            socket = io(currentOrigin, {
+                transports: ['websocket', 'polling'],
+                upgrade: true,
+                rememberUpgrade: true
+            });
             
             socket.on('connect', () => {
-                console.log('Socket.IO已连接');
+                console.log('Socket.IO已连接，服务器地址:', currentOrigin);
                 // 直接切换到聊天界面，不需要发送用户加入事件
                 currentUser = { id: 'anonymous', name: '我' };
                 cryptoKey = key;
@@ -682,7 +695,6 @@
             });
 
             socket.on('receive-encrypted-message', (data) => {
-                console.log(data);
                 const {encryptedMessage} = data;
                 handleReceivedMessage(encryptedMessage);
             });
